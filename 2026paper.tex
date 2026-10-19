@@ -1,0 +1,138 @@
+\documentclass[sigconf,nonacm]{acmart}
+\settopmatter{printacmref=false}
+\setcopyright{none}
+\renewcommand\footnotetextcopyrightpermission[1]{}
+\pagestyle{plain}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{url}
+\title{Predicting NFL Game Winners from Rolling Team Statistics}
+\author{Yari Pettis}
+\affiliation{\institution{North Carolina A&T State University}}
+\begin{document}
+\begin{abstract}
+Predicting the winner of an NFL game is difficult because outcomes depend on many factors, including injuries, matchups, and chance. This project asks whether a team's recent statistics can be used to predict the winner of an upcoming game. Using weekly regular-season team statistics from a public Kaggle dataset, I computed each team's average over its previous four games, took the difference between the home and away teams, and trained Logistic Regression and Random Forest classifiers on older seasons. The models were tested on later seasons they had never seen and compared with a baseline that always predicts the home team. On 408 held-out games, Logistic Regression reached 59.31\% accuracy and Random Forest reached 59.07\%, compared with 52.21\% for the baseline. I also built a web interface that returns a win probability for any chosen matchup. The model has no information about injuries or player absences, which is its main limitation.
+
+\end{abstract}
+\maketitle
+\section{Related Work}
+Previous research has used machine learning and statistical models to predict the outcomes of NFL games. One study by Gifford and Bayrak (2023) investigated NFL game outcomes using Decision Tree and Binary Logistic Regression models. The researchers used a sample of 4,096 regular-season games from the 2002--2017 NFL seasons. The data came from Pro Football Reference and included different team statistics that could be related to winning a game.
+
+The researchers found that offensive turnovers and defensive turnovers were the most important variables for predicting NFL wins. Their Binary Logistic Regression model had a misclassification rate of 0.169, which means it achieved 83.1\% accuracy. The Decision Tree model had a misclassification rate of approximately 0.216, giving it an accuracy of about 79\%. Because Logistic Regression had the lower misclassification rate, it was selected as the final predictive model.
+
+However, one limitation of their research was that the models used statistics from the games that had already been played. This means the models were able to identify which statistics were most related to winning, but they could not necessarily predict the outcome of a game before it happened. The study also combined data from 16 seasons without separating the seasons by year, which may not account for changes in how NFL teams play over time.
+
+My project takes a different approach because it uses statistics from the previous four games instead of the current game. This allows the model to make predictions before the game begins. My project also separates the training and testing data by season, allowing the models to be tested on games that happened after the training period.
+
+\section{Introduction}
+Football is one of the hardest sports to predict. A season is only 17 games per team, a single turnover or special-teams play can decide a game, and many influences such as injuries, weather, and coaching decisions do not appear in box-score statistics. Even so, teams that gain more yards, score more touchdowns, and protect the ball tend to win more often, which suggests that part of the signal is in the numbers.
+
+This project asks one question: Can previous NFL team statistics be used to predict the winner of an upcoming game? Sports analysts, researchers, and coaches or recruiters could benefit from a quick, data-based comparison of two teams.
+
+The role of machine learning is to compare the relationship between team statistics and game outcomes from historical games, rather than a person deciding by hand how much each statistic matters. The trained model takes recent statistics of two teams and outputs the probability that each team wins.
+
+The contributions of this project are a feature pipeline that uses only information available before kickoff, outcome labels built from final scores and cross-checked against the dataset's own win records, a chronological evaluation against a simple baseline, and an interactive matchup interface.
+
+\section{Data}
+The data comes from the Kaggle dataset NFL Stats 1999-2022 (philiphyde1), specifically the file weekly\_team\_stats\_offense.csv. It contains one row per team per game with offensive statistics including points scored and points scored by that team's defense. The data used here includes regular season games through the most recent seasons in the file. Playoff games were excluded. The dataset is public and contains team-level statistics only, so it involves no private or personal information.
+
+Eight statistics were used for inputs such as passing yards, rushing yards, interceptions, passing touchdowns, rushing touchdowns, first downs bypass, first downs by rush, and total yards. Not every game could be used. Table 1 lists the games that were removed and why.
+
+\begin{table}[t]
+\centering
+\footnotesize
+\begin{tabular}{@{}p{0.76\columnwidth}r@{}}
+\toprule
+Reason for   removal & Games \\
+\midrule
+Game did not   have exactly two team rows & 260 \\
+A team had   fewer than four prior games that season & 839 \\
+Missing   scoring values & 44 \\
+Ties & 13 \\
+Score-based   label disagreed with the dataset's win records & 3 \\
+\bottomrule
+\end{tabular}
+\caption{Games excluded from the analysis.}
+\end{table}
+The final dataset has 2,504 games: 2,096 for training and 408 for testing.
+
+\section{Methods}
+\subsection{Outcome labels}
+The target is whether the home team won or lost. An early version of the project decided winners by comparing each team's offensive points only. That was wrong, because it ignores points scored by defense and special teams, such as interception returns. In this dataset, the defensive points in a team row are points scored by that team's defense against the opponent, so a team's final score is its own offensive points plus the opponent's row's defensive points. The home team won if its final score was higher. Ties were removed.
+
+To verify the labels, I compared them with the dataset's running season win totals. A game's recorded winner can be found from the change in each team's win count. Only 3 games disagreed, and they were removed.
+
+Another problem was found in the code where the actual winner was calculated using the scores, but a different expression was used when creating the training labels. This caused incorrect labels for some games. I corrected the code, so the training labels now use the actual winner calculated from the scores. After correcting the labels, I reran the models and updated the results.
+
+\subsection{Pre-game features}
+For every team and season, the averaged of the eight statistics over the team’s previous four games. The data were shifted by one game before averaging, so the current game is never included, and the features contain only information available before kickoff. An earlier version of the pipeline had leaked information from the game being predicted, which inflated accuracy with the result was discarded after the leak was fixed. Averages are computed within a season, so each team's first four games of a season have no features and are excluded. For each game, the model input is the home team's four-game average minus the away team's four-game average for each statistic, giving eight difference features. Home-field advantage is not an input; it is absorbed by the model's intercept.
+
+\subsection{Train and test split}
+The games were not shuffled. Seasons through 2023 were used for training (2,096 games), and seasons from 2024 onward were used for testing (408 games). This mimics real use, in which a model trained in the past predicts games it has not seen. All models were trained and scored on the same labels and in the same split.
+
+\subsection{Models}
+Three approaches were compared. The first was a baseline that always predicts that the home team wins. The second was Logistic Regression, where the features were standardized before the model was trained. The third was Random Forest, which used 300 decision trees with a maximum depth of 5 and a random state of 42 to make the results reproducible.
+
+The models were evaluated using accuracy, which measures how often the predicted winner was correct. Log loss was also considered because it measures how well the model's predicted probabilities match the actual outcomes and penalizes confident wrong predictions.
+
+\subsection{How the model turns statistics into a prediction}
+Since the model does not know who will win, it estimates a probability based on patterns in past games. With Logistic Regression, each of the eight difference features gains weight. The model adds the weighted differences, adds an intercept, and converts the total into a probability between 0 and 1. During training, the weights are adjusted so that the probabilities match the winners of the 2,096 historical games as closely as possible. A positive weight means that a home-team advantage in that statistic increases its win probability. For a new matchup, the model computes the same four-game differences and applies to the learned weights, adding the teams' probability above 50\% is predicted to win. Random Forest works differently: it combines many decision trees, each of which splits games by thresholds on the statistics.
+
+\subsection{Matchup interface}
+The Logistic Regression weights and each team's recent game statistics were exported to a file. A React web page loads that file, lets the user choose a season, week, home team, and away team, and computes the predicted win probability in the browser. It also shows the four-game averages used as input and warns the user when the selected season was part of the training data, since that is not a true held-out prediction.
+
+\section{Results}
+\begin{table}[t]
+\centering
+\footnotesize
+\begin{tabular}{@{}lr@{}}
+\toprule
+Model & Test   accuracy \\
+\midrule
+Always   predict home (baseline) & 52.21\% \\
+Logistic   Regression & 59.31\% \\
+Random Forest & 59.07\% \\
+\bottomrule
+\end{tabular}
+\caption{Performance on 408 held-out games (2024 onward).}
+\end{table}
+\begin{table}[t]
+\centering
+\scriptsize
+\begin{tabular}{@{}lcc@{}}
+\toprule
+ & \shortstack{Predicted\\away win} & \shortstack{Predicted\\home win} \\
+\midrule
+Actual away win & 72 & 123 \\
+Actual home win & 43 & 170 \\
+\bottomrule
+\end{tabular}
+\caption{Confusion matrix for Logistic Regression.}
+\end{table}
+Logistic Regression had the highest accuracy at 59.31\%, followed by Random Forest at 59.07\%. The baseline achieved 52.21\%. This means Logistic Regression performed about 7.10 percentage points better than the baseline, while Random Forest performed about 6.86 percentage points better. The difference between Logistic Regression and Random Forest was only 0.24 percentage points, which is one game out of the 408 test games.
+
+\section{Discussion}
+Both models performed better than the always-home baseline. Logistic Regression was 7.10 percentage points more accurate than the baseline, while Random Forest was 6.86 percentage points more accurate. However, the difference between the two models was small, with Logistic Regression correctly predicting only one more game. The confusion matrix also showed that the model predicted home wins more often than away wins, which suggests that it had difficulty predicting away victories.
+
+Compared to Gifford and Bayrak (2023), whose Logistic Regression model achieved 83.1\% accuracy, my model achieved 59.31\%. However, their model used statistics from completed games, while mine used statistics from the previous four games to predict future outcomes. This makes my approach different because it uses only information available before the game begins.
+
+The results show that recent offensive statistics can help predict NFL winners, but the model still has limitations. Fixing data leakage and incorrect outcome labels was important to making the results more reliable. Adding defensive statistics, injuries, and other factors could help improve future predictions.
+
+\section{Limitations}
+There are limitations that makes the probability worse or better the chances for teams such as no injuries or player absences with the model cannot tell when a starting quarterback or other key player is missing, which can change a game's outcome substantially. With offense only, the inputs describe offensive production. Lastly with defensive quality, special teams, weather, travel, coaching, and trades are not included.
+
+The short memory that dataset can be limited to cause the four-game averages to be noisy, and the first four games of each season cannot be predicted.
+
+The one splits results come from a single train/test division and a limited number of test games.
+
+\noindent $\bullet$ Derived labels. Winners were computed from points and cross-checked against win records, not read from an official winner field.
+\noindent $\bullet$ Interface scope. The web interface uses only Logistic Regression.
+This project shows that a team's statistics over its previous four games can predict NFL winners better than always choosing the home team using a pipeline that avoids leakage and an evaluation on later seasons. The two main lessons were that data leakage, and incorrect labels can make results look better or worse than they really are, and that checking labels against an independent source is essential. This project will have more to add for better predictions includes adding defensive statistics and a win-percentage baseline, using injury and starting-quarterback information, trying other window lengths, evaluating with several chronological splits, checking probability calibration, and comparing the model with betting-market probabilities.
+
+\begin{thebibliography}{9}
+\bibitem{ref1} philiphyde1. NFL Stats 1999-2022. Kaggle. \url{https://www.kaggle.com/datasets/philiphyde1/nfl-stats-1999-2022}
+\bibitem{ref2} Pedregosa, F., et al. Scikit-learn: Machine Learning in Python. Journal of Machine Learning Research, 12:2825-2830, 2011.
+\bibitem{ref3} McKinney, W. Data Structures for Statistical Computing in Python. Proceedings of the 9th Python in Science Conference, 56-61, 2010.
+\bibitem{ref4} Gifford, M., and Bayrak, T. (2023). A predictive analytics model for forecasting outcomes in the National Football League games using decision tree and logistic regression. Decision Analytics Journal, 8, 100296.
+\end{thebibliography}
+\end{document}
